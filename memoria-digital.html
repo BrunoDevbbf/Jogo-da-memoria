@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Memória Digital</title>
+<style>
+:root{--bg:#0f4c5c;--card:#e36414;--face:#fff;--ok:#9ad1a0;--ink:#fff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Trebuchet MS",system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom);user-select:none;-webkit-user-select:none;touch-action:manipulation}
+header{width:min(92vw,440px)}
+h1{margin:0 0 6px;font-size:1.5rem;letter-spacing:-.01em}
+.stats{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.stats div{font-size:.9rem}
+.stats b{display:block;font-size:1.35rem;line-height:1.1}
+.stats .restart{background:transparent;color:#fff;border:2px solid #fff8;border-radius:999px;padding:8px 16px;font:inherit;font-size:.95rem;cursor:pointer}
+.stats .restart:hover{background:#ffffff22}
+.board{width:min(92vw,440px,calc((100dvh - 190px) * .88));display:grid;grid-template-columns:repeat(4,1fr);gap:8px;position:relative}
+.card{aspect-ratio:1/1.15;padding:0;border:0;background:none;perspective:600px;cursor:pointer}
+.in{position:relative;display:block;width:100%;height:100%;transition:transform .35s;transform-style:preserve-3d}
+.card.up .in{transform:rotateY(180deg)}
+.f,.b{position:absolute;inset:0;border-radius:12px;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.f{background:var(--card);font-size:1.8rem;font-weight:700;color:#fff3;box-shadow:inset 0 0 0 3px #ffffff33}
+.b{background:var(--face);color:#0f4c5c;transform:rotateY(180deg);font-size:clamp(1.6rem,9vw,2.6rem)}
+.b small{font-size:clamp(.6rem,2.8vw,.8rem);font-weight:700}
+.card.ok .b{background:var(--ok)}
+.card:focus-visible{outline:3px solid #fff;outline-offset:2px;border-radius:12px}
+.overlay{position:absolute;inset:-6px;border-radius:16px;background:#0f4c5cef;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:20px;z-index:2}
+.overlay.hide{display:none}
+.overlay h2{margin:0;font-size:1.7rem}
+.overlay p{margin:0;line-height:1.45}
+.play{background:var(--card);color:#fff;border:0;border-radius:999px;padding:12px 30px;font:inherit;font-weight:700;font-size:1.1rem;cursor:pointer;margin-top:6px}
+@media (prefers-reduced-motion:reduce){.in{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Memória Digital</h1>
+  <div class="stats">
+    <div>Jogadas<b id="moves">0</b></div>
+    <div>Tempo<b id="time">0s</b></div>
+    <div>Melhor<b id="best">–</b></div>
+    <button class="restart" id="re">Reiniciar</button>
+  </div>
+</header>
+<div class="board" id="board">
+  <div class="overlay hide" id="ov">
+    <h2>Você achou todos os pares!</h2>
+    <p id="ovP"></p>
+    <button class="play" id="again">Jogar de novo</button>
+  </div>
+</div>
+<script>
+const ITEMS=[['🖥️','Monitor'],['⌨️','Teclado'],['🖱️','Mouse'],['💾','Disquete'],['📱','Celular'],['🔌','Tomada'],['🌐','Internet'],['🤖','Robô']];
+const $=id=>document.getElementById(id);
+const board=$('board');
+let first=null, lock=false, found=0, moves=0, t0=0, tick=null, best=null;
+try{best=+localStorage.getItem('memoria-melhor')||null}catch(e){}
+if(best)$('best').textContent=best;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function newGame(){
+  clearInterval(tick); tick=null; first=null; lock=false; found=0; moves=0; t0=0;
+  $('moves').textContent=0; $('time').textContent='0s';
+  $('ov').classList.add('hide');
+  board.querySelectorAll('.card').forEach(n=>n.remove());
+  shuffle([...ITEMS,...ITEMS]).forEach(([e,n])=>{
+    const b=document.createElement('button');
+    b.className='card'; b.dataset.k=n; b.setAttribute('aria-label','Carta virada para baixo');
+    b.innerHTML=`<span class="in"><span class="f">?</span><span class="b">${e}<small>${n}</small></span></span>`;
+    b.addEventListener('click',()=>flip(b));
+    board.appendChild(b);
+  });
+}
+function flip(c){
+  if(lock||c.classList.contains('up'))return;
+  if(!tick){t0=Date.now();tick=setInterval(()=>{$('time').textContent=Math.floor((Date.now()-t0)/1000)+'s'},500)}
+  c.classList.add('up'); c.setAttribute('aria-label',c.dataset.k);
+  if(!first){first=c;return}
+  moves++; $('moves').textContent=moves;
+  const a=first; first=null;
+  if(a.dataset.k===c.dataset.k){
+    a.classList.add('ok');c.classList.add('ok');
+    if(++found===ITEMS.length)win();
+  }else{
+    lock=true;
+    setTimeout(()=>{
+      [a,c].forEach(x=>{x.classList.remove('up');x.setAttribute('aria-label','Carta virada para baixo')});
+      lock=false;
+    },800);
+  }
+}
+function win(){
+  clearInterval(tick);
+  const s=Math.floor((Date.now()-t0)/1000);
+  let msg=`${moves} jogadas em ${s}s.`;
+  if(!best||moves<best){best=moves;$('best').textContent=best;try{localStorage.setItem('memoria-melhor',best)}catch(e){}msg+=' Novo recorde!'}
+  $('ovP').textContent=msg;
+  setTimeout(()=>$('ov').classList.remove('hide'),600);
+}
+$('re').addEventListener('click',newGame);
+$('again').addEventListener('click',newGame);
+newGame();
+</script>
+</body>
+</html>
